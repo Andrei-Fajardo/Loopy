@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Loopy!</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%9F%3C/text%3E%3C/svg%3E">
+<script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+<style>
+  @font-face { font-family: 'Fredoka'; font-weight: 500; font-display: swap; src: url(fonts/fredoka-500.ttf) format('truetype'); }
+  @font-face { font-family: 'Fredoka'; font-weight: 700; font-display: swap; src: url(fonts/fredoka-700.ttf) format('truetype'); }
+</style>
+<style>
+  :root { --deep: #0b3a4a; --ink: #ffffff; --muted: #bfe6ee; --accent: #ffb347; --good: #7bd389; --bad: #ff5d73; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; max-height: 100%; overscroll-behavior: none; background: #0f5465; color: var(--ink); font-family: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+    overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+  .hidden { display: none !important; }
+
+  #hud { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 12px;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 0; pointer-events: none; z-index: 2; }
+  .chip { background: rgba(5, 40, 52, .55); border-radius: 999px; padding: 4px 14px; font-weight: 700; font-size: 20px;
+    font-variant-numeric: tabular-nums; backdrop-filter: blur(4px); transition: transform .12s, color .2s; }
+  .chip.bump { transform: scale(1.18); }
+  #combo { color: var(--accent); }
+  #combo.hot { color: #fff; background: linear-gradient(90deg, #ff8a4c, #ff5d8f); }
+  #combo.max { background: linear-gradient(90deg, #ff5d8f, #c86bfa, #4cc9f0, #7bd389); }
+  .meter { flex: 1; display: flex; flex-direction: column; gap: 3px; align-items: stretch; }
+  .meter small { font-size: 12px; color: var(--muted); letter-spacing: 1px; text-align: center; text-shadow: 0 1px 2px rgba(0,0,0,.7); }
+  .bar { height: 10px; border-radius: 5px; background: rgba(5, 40, 52, .55); overflow: hidden; }
+  #fill { height: 100%; width: 0; background: var(--good); transition: width .2s, background .2s; }
+  #hud.practice #pause, #hud.practice .meter, #hud.practice .hud-row + .hud-row { visibility: hidden; } /* the tutorial has no pause, pond meter or best/Frenzy bars */
+  #mute, #pause { pointer-events: auto; border: 0; font-size: 20px; background: rgba(5, 40, 52, .55); color: #fff; border-radius: 999px;
+    width: 40px; height: 34px; cursor: pointer; }
+
+  #banner { position: fixed; top: 28%; left: 16px; right: 16px; text-align: center; font-size: clamp(38px, 11vw, 72px);
+    font-weight: 700; color: var(--accent); text-shadow: 0 5px 0 var(--deep), 0 0 24px rgba(255,200,80,.6); pointer-events: none;
+    animation: banner 1.5s cubic-bezier(.2,1.6,.4,1) forwards; z-index: 2; }
+  #banner.sweep { color: #7bf0ff; text-shadow: 0 5px 0 var(--deep), 0 0 24px rgba(120,240,255,.7); }
+  @keyframes banner { 0% { transform: scale(.3) rotate(-6deg); opacity: 0; } 18% { transform: scale(1.15) rotate(2deg); opacity: 1; }
+    30% { transform: scale(1) rotate(0); } 78% { opacity: 1; } 100% { transform: translateY(-30px); opacity: 0; } }
+
+  .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px;
+    background: rgba(4, 30, 40, .55); z-index: 3; }
+  .card { background: #fff; color: var(--deep); border-radius: 22px; padding: 26px 22px; width: min(340px, 100%);
+    text-align: center; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 0 rgba(0, 0, 0, .18); }
+  .card h1 { font-size: 52px; line-height: 1; color: #0f5465; }
+  .card h2 { font-size: 32px; }
+  .rules { text-align: left; display: flex; flex-direction: column; gap: 6px; font-size: 16px; }
+  .rules > span { display: flex; gap: 8px; align-items: baseline; }
+  .rules b { color: #0f5465; }
+  .big { font-size: 44px; font-weight: 700; color: #0f5465; line-height: 1; }
+  .muted { color: #5b8792; font-size: 14px; }
+  button.btn { font: inherit; font-weight: 700; font-size: 22px; border: 0; border-radius: 14px; padding: 12px; cursor: pointer;
+    background: var(--accent); color: var(--deep); box-shadow: 0 5px 0 #d98a22; }
+  button.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #d98a22; }
+  button.ad { background: #2a9d8f; color: #fff; box-shadow: 0 5px 0 #1d6f65; font-size: 18px; }
+  button:focus-visible { outline: 3px solid var(--deep); outline-offset: 2px; }
+  button.btn.small { font-size: 16px; padding: 8px 12px; }
+  button.btn.ghost { background: #e6f3f6; color: var(--deep); box-shadow: 0 5px 0 #b9d6de; }
+  button:disabled { opacity: .45; cursor: default; }
+  /* Mouse players (the CrazyGames audience is mostly desktop): hover feedback, and a crosshair over the pond. */
+  @media (hover: hover) {
+    button.btn:not(:disabled):hover, .tab:hover, .dock-btn:hover, .item:hover, .icon-btn:hover { filter: brightness(1.07); transform: translateY(-1px); }
+    button.btn:not(:disabled):active, .tab:active, .dock-btn:active, .item:active, .icon-btn:active { transform: translateY(1px); }
+    canvas#c { cursor: crosshair; }
+  }
+  body { user-select: none; -webkit-user-select: none; }
+  input, textarea { user-select: text; -webkit-user-select: text; }
+
+  /* Main menu */
+  #menu { align-items: stretch; justify-content: center; overflow-y: auto; background: rgba(4, 30, 40, .28);
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 14px calc(env(safe-area-inset-bottom, 0px) + 10px); }
+  .how { display: flex; flex-direction: column; gap: 8px; }
+  .how-row { display: flex; gap: 12px; align-items: center; background: #fff; border: 2px solid #d3e8ed; border-radius: 14px; padding: 8px 10px; }
+  .how-row.bad { border-color: #ffd0d7; }
+  .how-ico { width: 42px; height: 42px; flex: none; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: var(--c); }
+  .how-row div { min-width: 0; }
+  .how-row b { display: block; font-size: 16px; color: #0b3a4a; line-height: 1.2; }
+  .how-row small { display: block; font-size: 13.5px; color: #3d6670; line-height: 1.3; }
+  .menu { width: min(400px, 100%); height: 100%; min-height: 0; display: flex; flex-direction: column; align-items: stretch; gap: clamp(6px, 1.5vh, 12px);
+    padding-top: env(safe-area-inset-top, 0px); }
+  .topbar { display: flex; justify-content: space-between; align-items: center; }
+  .level-pill { font: inherit; border: 0; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,.92); border-radius: 999px; padding: 4px 12px 4px 4px; color: var(--deep); }
+  .level-pill .lv { background: var(--deep); color: #fff; font-weight: 700; border-radius: 50%; width: 30px; height: 30px;
+    display: grid; place-items: center; }
+  .level-pill .xp { width: 46px; height: 8px; background: #d8ebef; border-radius: 4px; overflow: hidden; }
+  #xpFill { display: block; height: 100%; width: 0; background: #2a9d8f; }
+  .coin-chip { background: rgba(255,255,255,.92); color: var(--deep); border-radius: 999px; padding: 4px 14px; font-weight: 700;
+    font-size: 18px; font-variant-numeric: tabular-nums; }
+  .coin-chip::before, .coin-text::before { content: "●"; color: #f5b700; margin-right: 6px; }
+  .title { font-size: clamp(56px, 16vw, 84px); line-height: .95; text-align: center; color: #fff; text-shadow: 0 6px 0 var(--deep); }
+  .streak { background: #ffd84d; color: var(--deep); border-radius: 14px; padding: 6px 12px; text-align: center; font-weight: 700; }
+  .panel { width: 100%; text-align: left; gap: clamp(8px, 1.6vh, 14px); padding: clamp(8px, 1.6vh, 14px); background: #e9f4f7; flex: 1 1 0; min-height: 150px; display: flex; flex-direction: column; }
+  .panel .tab:not(.active) { background: #fff; }
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .tab { font: inherit; font-weight: 700; font-size: 15px; border: 0; border-radius: 14px; padding: 11px 2px; cursor: pointer;
+    background: #e6f3f6; color: var(--deep); position: relative; }
+  .tab.active { background: var(--deep); color: #fff; }
+  .badge { position: absolute; top: -6px; right: -4px; background: var(--bad); color: #fff; border-radius: 999px; font-size: 12px;
+    min-width: 20px; height: 20px; line-height: 20px; padding: 0 5px; text-align: center; }
+  #tabBody { display: flex; flex-direction: column; gap: 12px; padding-right: 2px; flex: 1 1 0; min-height: 0; overflow-y: auto; }
+  .subtabs { display: flex; gap: 8px; padding: 2px 0 4px; }
+  .subtab { font: inherit; font-weight: 700; font-size: 14px; flex: 1; border: 2px solid #b9d6de; border-radius: 12px; padding: 7px 0;
+    background: #fff; color: var(--deep); cursor: pointer; }
+  .subtab.active { background: #2a9d8f; border-color: #2a9d8f; color: #fff; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .item { font: inherit; border: 2px solid #d3e8ed; border-radius: 14px; background: #fff; padding: 8px 4px 6px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--deep); min-width: 0; }
+  .item.on { border-color: #2a9d8f; box-shadow: 0 0 0 2px #2a9d8f inset; }
+  .item.locked { background: #f4f8f9; }
+  .item.locked:disabled { opacity: .8; }
+  .item.locked img, .item.locked .sw, .item.locked .emoji { opacity: .6; filter: grayscale(.6); }
+  .item b { font-size: 13px; line-height: 1.1; text-align: center; }
+  .item small { font-size: 12px; font-weight: 700; color: #c98a00; }
+  .item.on small { color: #2a9d8f; }
+  .item.locked small { color: #5b8792; }
+  .sw { display: inline-block; border-radius: 50%; box-shadow: inset -5px -5px 0 rgba(0,0,0,.15); }
+  .emoji { display: grid; place-items: center; width: 46px; height: 46px; }
+  .note { font-size: 13px; color: #5b8792; text-align: center; }
+  .mission { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
+  .mission b { font-size: 15px; }
+  .mission .btn { grid-row: 1 / span 2; grid-column: 2; width: 104px; }
+  .bar { height: 8px; border-radius: 4px; background: #d8ebef; overflow: hidden; }
+  .bar div { height: 100%; background: #2a9d8f; }
+  .profile { display: flex; align-items: center; gap: 12px; }
+  .profile div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .profile small { font-size: 13px; color: #5b8792; }
+  .lvbig { background: var(--deep); color: #fff; font-weight: 700; font-size: 24px; border-radius: 50%; width: 54px; height: 54px;
+    display: grid; place-items: center; flex: none; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stats div, .rewards div { background: #fff; border: 2px solid #d3e8ed; border-radius: 12px; padding: 6px 10px; text-align: left; }
+  .rewards div { background: #f2f9fb; }
+  .stats small, .rewards small { display: block; font-size: 12px; color: #5b8792; }
+  .stats b, .rewards b { font-size: 18px; font-variant-numeric: tabular-nums; }
+  .chart { background: #fff; border: 2px solid #d3e8ed; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .chart-title { font-size: 13px; font-weight: 700; }
+  .hbar { display: grid; grid-template-columns: 14px 1fr 3.5em; gap: 8px; align-items: center; font-size: 13px; }
+  .hbar .dot { width: 14px; height: 14px; border-radius: 50%; }
+  .hbar .track { height: 10px; background: #d8ebef; border-radius: 5px; overflow: hidden; }
+  .hbar .track div { height: 100%; border-radius: 5px; }
+  .hbar b { text-align: right; font-variant-numeric: tabular-nums; }
+  .vbars { display: flex; align-items: flex-end; gap: 3px; height: 70px; }
+  .vbars div { flex: 1; background: #9fd3dc; border-radius: 3px 3px 0 0; }
+  .vbars div.latest { background: #2a9d8f; }
+
+  .rewards { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .cf-icon { display: grid; place-items: center; }
+  .cf-title { font-size: 24px; font-weight: 700; }
+  .cf-price { font-size: 20px; font-weight: 700; color: #c98a00; }
+  .cf-price.short { color: var(--bad); }
+  .cf-skip { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; color: #5b8792; cursor: pointer; }
+  .cf-skip input { width: 18px; height: 18px; accent-color: #2a9d8f; }
+  .cf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #confirm, #ad { z-index: 5; }
+  #toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 56px); transform: translateX(-50%); z-index: 6;
+    background: var(--deep); color: #fff; font-weight: 700; padding: 8px 16px; border-radius: 999px; max-width: calc(100% - 32px);
+    text-align: center; pointer-events: none; animation: toast 2.5s ease forwards; }
+  @keyframes toast { 0% { opacity: 0; transform: translate(-50%, -10px); } 10%, 85% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
+
+  /* HUD: second row with the best-score chase and the Frenzy meter */
+  #hud { flex-direction: column; align-items: stretch; gap: 6px; }
+  .hud-row { display: flex; align-items: center; gap: 10px; }
+  #combo { position: relative; overflow: hidden; }
+  #comboTimer { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: #fff; opacity: .8; }
+  .mini { flex: 1; position: relative; height: 18px; border-radius: 9px; background: rgba(5, 40, 52, .55); overflow: hidden;
+    display: grid; place-items: center; }
+  .mini > div { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 9px; transition: width .15s; }
+  .mini span { position: relative; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+  #bestFill { background: linear-gradient(90deg, #2a9d8f, #7bd389); }
+  #bestBar.beat #bestFill { background: linear-gradient(90deg, #ffb347, #ffd84d); }
+  #frenzyFill { background: linear-gradient(90deg, #ff8a4c, #ff5d8f); }
+  #frenzyBar.on #frenzyFill { background: linear-gradient(90deg, red, orange, yellow, lime, cyan, blue, violet); background-size: 200% 100%;
+    animation: rainbow 1s linear infinite; }
+  @keyframes rainbow { to { background-position: 200% 0; } }
+
+  #banner.king, #banner.best { color: #ffd84d; }
+  #banner.frenzy { color: #fff; text-shadow: 0 5px 0 #c42d5f, 0 0 30px rgba(255,93,143,.9); }
+  #banner.slow { color: #bfe6ff; }
+
+  /* "NEW SPECIES!" card: a small card that slides up in the bottom-left corner, clear of the play area (it ignores taps too) */
+  #discovery { position: fixed; left: calc(env(safe-area-inset-left, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); z-index: 4;
+    background: rgba(255,255,255,.96); color: var(--deep); border-radius: 16px; padding: 8px 14px 8px 8px; width: min(250px, calc(100vw - 24px));
+    display: grid; grid-template-columns: 56px 1fr; grid-template-areas: "img eye" "img name" "img rar" "img cnt"; column-gap: 10px; align-items: center; pointer-events: none;
+    box-shadow: 0 0 0 3px rgba(255,216,77,.7), 0 8px 20px rgba(0,0,0,.3); animation: disc 2.6s cubic-bezier(.2,1.2,.4,1) forwards; }
+  #discovery #discImg { grid-area: img; width: 56px; height: 56px; }
+  #discovery .disc-eyebrow { grid-area: eye; }
+  #discovery #discName { grid-area: name; }
+  #discovery #discRar { grid-area: rar; justify-self: start; }
+  #discovery #discCount { grid-area: cnt; margin-top: 0; }
+  @keyframes disc { 0% { transform: translateY(40px); opacity: 0; } 12% { transform: translateY(-4px); opacity: 1; } 20% { transform: translateY(0); }
+    86% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(14px); opacity: 0; } }
+  .disc-eyebrow { font-weight: 700; letter-spacing: 1.5px; font-size: 10px; color: #e08a00; }
+  #discovery.legendary { background: linear-gradient(160deg, #fff8dc, #ffe9a8); box-shadow: 0 0 0 3px #ffd84d, 0 0 26px 4px rgba(255,200,60,.75); }
+
+  /* Loopy! logo: chunky multicolor letters that bob like they're floating, O's as shiny bubbles */
+  .logo { position: relative; text-align: center; font-size: clamp(44px, min(19vw, 11vh), 104px); line-height: 1; font-weight: 700;
+    letter-spacing: -2px; margin-top: 4px; }
+  .logo span { display: inline-block; color: var(--c); animation: bob 2.4s ease-in-out infinite; animation-delay: var(--d);
+    text-shadow: 0 2px 0 #fff, 0 -2px 0 #fff, 2px 0 0 #fff, -2px 0 0 #fff, 0 7px 0 var(--deep), 0 12px 18px rgba(0,0,0,.25); }
+  /* The two O's are real bubbles: see-through tinted inside, colored rim, white glare + reflection. */
+  .logo .bub { position: relative; width: .56em; height: .56em; margin: 0 .03em; border-radius: 50%;
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255,255,255,.95) 0 9%, rgba(255,255,255,0) 10%),
+      radial-gradient(circle at 50% 55%, rgba(var(--ca),.18) 0 50%, rgba(var(--ca),.55) 78%, rgba(var(--ca),.95) 100%);
+    box-shadow: inset 0 0 0 .045em var(--c), 0 0 0 .035em #fff, 0 .07em 0 .03em var(--deep), 0 .12em .2em rgba(0,0,0,.25);
+    animation-name: squish; }
+  .logo .bub::before { content: ""; position: absolute; left: 18%; top: 14%; width: 46%; height: 30%; border-radius: 50%;
+    border-top: .04em solid rgba(255,255,255,.9); transform: rotate(-28deg); }
+  .logo .bub::after { content: ""; position: absolute; right: 18%; bottom: 16%; width: 14%; height: 14%; border-radius: 50%;
+    background: rgba(255,255,255,.75); }
+  @keyframes squish { 0%, 100% { transform: translateY(0) scale(1, 1); } 25% { transform: translateY(-4px) scale(1.05, .95); }
+    50% { transform: translateY(-9px) scale(.96, 1.05); } 75% { transform: translateY(-4px) scale(1.04, .97); } }
+  .logo .bang { transform-origin: bottom center; animation-name: wobble; }
+  .logo i { position: absolute; border-radius: 50%; border: 3px solid rgba(255,255,255,.75); background: rgba(255,255,255,.12);
+    animation: rise 3.2s ease-in infinite; }
+  .logo .b1 { width: 14px; height: 14px; right: 10%; bottom: 10%; }
+  .logo .b2 { width: 9px; height: 9px; right: 6%; bottom: 30%; animation-delay: 1.1s; }
+  .logo .b3 { width: 11px; height: 11px; left: 8%; bottom: 20%; animation-delay: 2s; }
+  @keyframes bob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-8px) rotate(2deg); } }
+  @keyframes wobble { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(10deg) translateY(-6px); } }
+  @keyframes rise { 0% { transform: translateY(0) scale(.6); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(-80px) scale(1.1); opacity: 0; } }
+  .menu > * { flex-shrink: 0; }
+  .menu > .panel { flex-shrink: 1; }
+  .menu button.btn { padding-block: clamp(6px, 1.4vh, 12px); font-size: clamp(16px, 2.7vh, 22px); }
+  #skinRow { padding-block: clamp(3px, 0.8vh, 6px); }
+  .dock-btn { padding-block: clamp(4px, 1vh, 8px); }
+  .dock-btn .di { font-size: clamp(17px, 3vh, 22px); }
+  .tab { padding-block: clamp(6px, 1.4vh, 11px); }
+  /* Browse mode folds the logo block away (and unfolds the "show" bar) with a height animation. grid 1fr -> 0fr animates to the content's real height;
+     the negative margin cancels the flex gap a folded block would otherwise leave behind. */
+  .fold { display: grid; transition: grid-template-rows .45s cubic-bezier(.3,.9,.3,1), opacity .35s ease, margin .45s cubic-bezier(.3,.9,.3,1); }
+  .fold > div { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: inherit; }
+  .fold.hero { grid-template-rows: 1fr; opacity: 1; }
+  .fold.hero > div { padding-top: 6px; gap: clamp(6px, 1.5vh, 12px); } /* room for the logo's bobbing, which overflow:hidden would clip */
+  .fold.bar { grid-template-rows: 0fr; opacity: 0; margin-bottom: calc(-1 * clamp(6px, 1.5vh, 12px)); pointer-events: none; }
+  #menu.browse .fold.hero { grid-template-rows: 0fr; opacity: 0; margin-bottom: calc(-1 * clamp(6px, 1.5vh, 12px)); pointer-events: none; }
+  #menu.browse .fold.bar { grid-template-rows: 1fr; opacity: 1; margin-bottom: 0; pointer-events: auto; }
+  #browseUp { font: inherit; font-weight: 700; font-size: 13px; color: #fff; background: rgba(4,30,40,.45); border: 0; border-radius: 12px; padding: 4px 10px; align-self: center; cursor: pointer; }
+  @media (prefers-reduced-motion: reduce) { .fold { transition: none; } }
+  #menu.browse button.btn { padding-block: 6px; font-size: 16px; }
+  @media (max-height: 720px) { .tagline { display: none; } }
+  @media (max-height: 560px) { .logo { display: none; } }
+  /* any pop-up card stays on screen, whatever the height */
+  .screen .card { max-height: 100%; overflow-y: auto; }
+  .screen .card > * { flex-shrink: 0; } /* the card scrolls; nothing inside gets squashed over its neighbours (many new collectibles in one run used to overlap the buttons) */
+  .sp-chips { max-height: 150px; overflow-y: auto; padding: 2px 2px 4px; }
+  .tagline { text-align: center; color: #fff; font-weight: 700; font-size: 17px; margin-top: -6px; text-shadow: 0 2px 0 var(--deep); }
+  @media (prefers-reduced-motion: reduce) { .logo span, .logo i { animation: none; } }
+  #discName { font-size: 16px; line-height: 1.1; }
+  #discRar { color: #fff; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 8px; letter-spacing: 1px; }
+  #discCount { font-size: 11px; color: #5b8792; }
+
+  .tabs { grid-template-columns: repeat(3, 1fr); }
+  .new-species { font-weight: 700; color: #e08a00; min-height: 0; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .sp-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .sp-chip { font: inherit; font-weight: 700; font-size: 14px; cursor: pointer; background: #fff; color: var(--deep); border: 2px solid var(--rc, #e08a00);
+    border-radius: 999px; padding: 3px 12px; box-shadow: 0 3px 0 rgba(0,0,0,.12); }
+  .sp-chip:hover, .sp-chip:focus-visible { background: var(--rc, #e08a00); color: #fff; }
+  .sp-chip:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,.12); }
+  #specPop { z-index: 8; background: rgba(4, 18, 30, .62); backdrop-filter: blur(3px); cursor: pointer; }
+  .spec-card { background: #fff; color: var(--deep); border-radius: 26px; padding: 18px 22px 14px; width: min(290px, 100%); text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 6px; box-shadow: 0 0 0 5px var(--rc), 0 0 40px var(--rc), 0 16px 0 rgba(0,0,0,.18);
+    animation: fpop2 .35s cubic-bezier(.2,1.5,.4,1); }
+  .spec-card.legendary { background: linear-gradient(#fffbe8, #fff3c4); }
+  .spec-art { width: 160px; height: 150px; display: grid; place-items: center; border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in srgb, var(--rc) 28%, #fff), #fff 70%); }
+  .spec-rar { color: #fff; font-size: 13px; font-weight: 700; border-radius: 999px; padding: 2px 14px; }
+  .spec-card > b { font-size: 26px; line-height: 1.1; }
+  .spec-card small { color: #5b8792; font-size: 13px; }
+  .spec-stats { display: flex; gap: 10px; margin-top: 4px; }
+  .spec-stats > div { background: #eef7f9; border-radius: 14px; padding: 6px 16px; display: flex; flex-direction: column; }
+  .spec-stats b { font-size: 20px; }
+  .spec-hint { margin-top: 6px; opacity: .8; }
+  @keyframes fpop2 { 0% { transform: scale(.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  .new-species:empty { display: none; }
+
+  /* Upgrades */
+  .upg { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; background: #fff;
+    border: 2px solid #d3e8ed; border-radius: 14px; padding: 8px 10px; }
+  .upg div { min-width: 0; }
+  .upg b { display: block; font-size: 16px; }
+  .upg small { display: block; font-size: 13px; color: #3d6670; }
+  .upg .btn { width: 92px; }
+  .pips { display: flex; gap: 4px; margin-top: 4px; }
+  .pips i { width: 10px; height: 6px; border-radius: 3px; background: #d8ebef; }
+  .upg .lv { font-size: 12px; font-weight: 600; color: #3d6670; }
+  .upg small.fx { color: #1f7a6f; font-weight: 600; }
+  .pips i.on { background: #2a9d8f; }
+
+  /* Album */
+  .album-head { display: flex; flex-direction: column; gap: 4px; }
+  .album-head small { font-size: 13px; color: #3d6670; }
+  .album-rewards { display: flex; flex-wrap: wrap; gap: 6px; }
+  .album-rewards .btn { flex: 1 1 45%; font-size: 13px; }
+  .album { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .fishcard { position: relative; background: #fff; border: 2px solid #d3e8ed; border-radius: 12px; padding: 4px 2px 6px;
+    display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
+  .fishcard b { font-size: 12px; line-height: 1.1; }
+  .fishcard small { font-size: 11px; font-weight: 700; }
+  .fishcard.unknown img { filter: brightness(0) opacity(.25); }
+  /* album tiles glow by rarity and sit on a little scene for their skin */
+  .fishcard.r-R { background: linear-gradient(#fff, #eaf2ff); border-color: #9cc0ff; }
+  .fishcard.r-E { background: linear-gradient(#fff, #f1e8ff); border-color: #c5a3f5; box-shadow: 0 0 10px rgba(131,56,236,.18); }
+  .fishcard.r-L { background: linear-gradient(#fffdf0, #ffeab8); border-color: #f0b84a; box-shadow: 0 0 14px rgba(224,138,0,.35); }
+  .fishcard.r-L::after { content: ""; position: absolute; inset: 0; border-radius: 10px; pointer-events: none;
+    background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.75) 50%, transparent 65%); background-size: 250% 100%; animation: cardshine 3.2s ease-in-out infinite; }
+  @keyframes cardshine { 0% { background-position: 150% 0; } 60%, 100% { background-position: -100% 0; } }
+  .fishcard.k-sheep:not(.unknown) { background-image: linear-gradient(#dff4fb 0 55%, #9bdc77 55%); }
+  .fishcard.k-balls:not(.unknown) { background-image: linear-gradient(#fff0f6 0 55%, #ffe08a 55%); }
+  .fishcard.k-sheep.r-L:not(.unknown), .fishcard.k-balls.r-L:not(.unknown) { border-color: #f0b84a; box-shadow: 0 0 14px rgba(224,138,0,.35); }
+  .fishcard.unknown.r-L { border-color: #e6d6a8; }
+  @media (prefers-reduced-motion: reduce) { .fishcard.r-L::after { animation: none; } }
+  .fishcard.unknown b { color: #9ab7be; }
+  .fishcard .count { position: absolute; top: 3px; right: 5px; font-size: 11px; font-weight: 700; color: #2a9d8f; }
+
+  /* Daily reward calendar */
+  #daily { z-index: 4; }
+  .days { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .day { background: #e6f3f6; border: 2px solid #d3e8ed; border-radius: 12px; padding: 6px 2px; display: flex; flex-direction: column;
+    align-items: center; gap: 2px; }
+  .day:last-child { grid-column: span 2; background: #fff6d6; border-color: #ffd84d; }
+  .day small { font-size: 11px; color: #5b8792; font-weight: 700; }
+  .day .chest { font-size: 24px; }
+  .day b { font-size: 14px; }
+  .day.past { opacity: .5; }
+  .day.now { border-color: #ffb347; background: #fff3e0; animation: pulse 1s ease-in-out infinite; }
+  .day.opened { animation: open .6s ease-out forwards; }
+  @keyframes pulse { 50% { transform: scale(1.06); } }
+  @keyframes open { 30% { transform: scale(1.3) rotate(-6deg); } 100% { transform: scale(1); background: #d9f5df; border-color: #7bd389; } }
+
+  #skinRow { display: flex; align-items: center; gap: 10px; background: rgba(5,40,52,.45); border-radius: 16px; padding: 6px 8px 6px 14px;
+    font-weight: 700; font-size: 17px; color: #e6f7fb; }
+  #skin { flex: 1; font: inherit; font-weight: 700; font-size: 17px; border: 0; border-radius: 12px; padding: 8px 10px; background: #fff;
+    color: var(--deep); box-shadow: 0 3px 0 rgba(0,0,0,.18); cursor: pointer; }
+  /* Menu: top-right help button, bottom dock, and the header shown on pages opened from them */
+  .topright { display: flex; align-items: center; gap: 6px; }
+  .icon-btn { font: inherit; font-weight: 700; font-size: 18px; width: 34px; height: 34px; border: 0; border-radius: 50%; cursor: pointer;
+    background: rgba(255,255,255,.92); color: var(--deep); box-shadow: 0 3px 0 rgba(0,0,0,.15); }
+  .icon-btn.on { background: var(--deep); color: #fff; }
+  .coin-chip.pulse { animation: coinpulse .45s ease 2; }
+  @keyframes coinpulse { 50% { transform: scale(1.18); background: #fff3b0; } }
+  .nudge { font-weight: 700; color: #2a9d8f; font-size: 15px; min-height: 0; }
+  .nudge:empty { display: none; }
+  .goal { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; background: #fff; border: 2px solid #d3e8ed; border-radius: 14px; padding: 7px 12px; font-size: 14px; }
+  .goal .bar { grid-column: 1 / 3; height: 8px; background: #d8ebef; }
+  .goal .bar > span { display: block; height: 100%; background: linear-gradient(90deg, #ffb347, #ffd84d); border-radius: 4px; }
+  .goal small { color: #5b8792; font-size: 12px; font-weight: 700; }
+  .icon-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,.15); }
+  .dock { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .dock-btn { position: relative; font: inherit; border: 0; border-radius: 16px; padding: 8px 2px 7px; cursor: pointer; display: flex;
+    flex-direction: column; align-items: center; gap: 2px; background: rgba(255,255,255,.94); color: var(--deep); box-shadow: 0 4px 0 #b9d6de; }
+  .dock-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #b9d6de; }
+  .dock-btn.on { background: var(--deep); color: #fff; box-shadow: 0 4px 0 #062631; }
+  .dock-btn.free { background: #2a9d8f; color: #fff; box-shadow: 0 4px 0 #1d6f65; }
+  .dock-btn .di { font-size: 22px; line-height: 1.1; }
+  .dock-btn .dl { font-size: 12px; font-weight: 700; }
+  .dock-btn .badge { top: -6px; right: 2px; }
+  .page-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .page-head b { font-size: 19px; }
+  .page-head button { font: inherit; font-weight: 700; font-size: 14px; border: 0; border-radius: 999px; padding: 6px 12px; cursor: pointer; background: #fff; color: var(--deep); box-shadow: 0 2px 0 #b9d6de; }
+  /* Vault and shop */
+  #vaultSpin { z-index: 6; }
+  .reels { display: flex; gap: 8px; justify-content: center; }
+  .reel { width: 66px; height: 80px; display: grid; place-items: center; font-size: 40px; border-radius: 16px;
+    background: linear-gradient(#e9f6fa, #fff 40%, #e9f6fa); box-shadow: inset 0 3px 8px rgba(0,60,80,.25), 0 3px 0 #b9d6de; }
+  .reel.spin { animation: reelshake .12s linear infinite; filter: blur(1px); }
+  .reel.win { animation: reelwin .5s ease-out; box-shadow: inset 0 3px 8px rgba(0,60,80,.25), 0 0 0 4px #ffd84d, 0 0 18px #ffd84d; }
+  @keyframes reelshake { 0% { transform: translateY(-3px); } 50% { transform: translateY(3px); } 100% { transform: translateY(-3px); } }
+  @keyframes reelwin { 0% { transform: scale(1.25); } 100% { transform: scale(1); } }
+  .vault-msg { font-size: 20px; font-weight: 700; color: var(--deep); min-height: 52px; }
+  .vault-head { background: #fff; border: 2px solid #d3e8ed; border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .vault-head b { font-size: 18px; }
+  .vault-head .bar { background: #d8ebef; }
+  .vault-head .bar > div { height: 100%; background: linear-gradient(90deg, #ffb347, #ffd84d); border-radius: 5px; }
+  .prize-row { display: flex; justify-content: space-between; font-size: 14px; padding: 3px 4px; border-bottom: 1px dashed #d3e8ed; }
+  .prize-row span:last-child { color: #5b8792; font-weight: 700; }
+  .shop-note { font-size: 13px; background: #fff7dd; border: 2px solid #ffe08a; border-radius: 12px; padding: 6px 10px; color: #7a5a00; }
+  .upg .tag { font-size: 11px; font-weight: 700; background: #ff5d73; color: #fff; border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: middle; white-space: nowrap; display: inline-block; }
+  /* Fishing minigame */
+  #fishing { position: fixed; inset: 0; z-index: 4; background: #0f5465; touch-action: none; }
+  #fishing canvas { position: absolute; inset: 0; }
+  #fTop { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 10px;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 14px 0; z-index: 2; }
+  #fTop #fTokens { margin-right: auto; }
+  .coin-chip.tok::before { content: "🎟️"; color: inherit; }
+  .fbtn { font: inherit; font-weight: 700; font-size: 18px; border: 0; border-radius: 999px; height: 40px; min-width: 40px; padding: 0 14px;
+    background: rgba(255,255,255,.92); color: var(--deep); cursor: pointer; box-shadow: 0 3px 0 rgba(0,0,0,.18); }
+  .fbtn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,.18); }
+  #fMsg { position: absolute; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 28px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); text-align: center; font-size: 22px; font-weight: 700; padding: 8px 20px 10px;
+    border-radius: 18px; background: linear-gradient(rgba(5,40,52,.72), rgba(5,40,52,.55)); border: 2px solid rgba(255,255,255,.18);
+    box-shadow: 0 6px 0 rgba(0,0,0,.18); pointer-events: none; }
+  #fMsg:empty { display: none; }
+  #fGear { position: absolute; left: 0; right: 0; top: calc(env(safe-area-inset-top, 0px) + 58px); display: flex; justify-content: center;
+    gap: 6px; flex-wrap: wrap; padding: 0 12px; z-index: 2; pointer-events: none; }
+  #fGear span { background: rgba(5,40,52,.55); border: 1px solid rgba(255,255,255,.2); border-radius: 999px; padding: 2px 10px; font-size: 12.5px;
+    font-weight: 700; color: #e6f7fb; }
+  .item .stat { font-size: 11px; font-weight: 500; color: #3d6670; text-align: center; line-height: 1.15; }
+  #fMsg small { display: block; font-size: 15px; color: var(--muted); font-weight: 500; margin-top: 4px; }
+  #fResult { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); width: min(300px, calc(100% - 32px)); z-index: 2;
+    background: #fff; color: var(--deep); border-radius: 22px; padding: 18px 16px; text-align: center; display: flex; flex-direction: column;
+    gap: 6px; align-items: center; box-shadow: 0 10px 0 rgba(0,0,0,.2); animation: fpop .35s cubic-bezier(.2,1.6,.4,1); }
+  #fResult .emoji-big { font-size: 64px; line-height: 1; }
+  #fResult b { font-size: 24px; line-height: 1.1; }
+  #fResult .tag { color: #fff; font-size: 13px; font-weight: 700; border-radius: 999px; padding: 2px 12px; }
+  #fResult .gain { font-size: 20px; font-weight: 700; color: #c98a00; }
+  #fResult small { color: #5b8792; font-size: 14px; }
+  @keyframes fpop { 0% { transform: translate(-50%, -50%) scale(.5); opacity: 0; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+  #fSheet { z-index: 5; }
+  .sheet { max-height: 100%; overflow-y: auto; }
+  #fBody { display: flex; flex-direction: column; gap: 8px; text-align: left; }
+  .junk { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .junk > div { background: #fff; border: 2px solid #d3e8ed; border-radius: 14px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .junk > div.unknown { opacity: .55; }
+  .junk .emoji-big { font-size: 30px; line-height: 1.1; }
+  .junk b { font-size: 13px; text-align: center; line-height: 1.1; }
+  .junk small { font-size: 12px; color: #5b8792; }
+  #confirm, #ad { z-index: 7; }
+  @media (prefers-reduced-motion: reduce) { #fResult { animation: none; } }
+  /* the satisfaction pass: live coin chip, combo heat, run-end payoff */
+  #runCoins { position: fixed; left: 12px; top: calc(env(safe-area-inset-top, 0px) + 80px); z-index: 2; font-size: 17px; padding: 3px 12px 3px 10px; display: flex; gap: 6px; align-items: center; pointer-events: none; }
+  #runCoins.hidden { display: none; }
+  #runCoins .rc-dot { color: #ffcf33; }
+  @keyframes combohot { 0%, 100% { box-shadow: 0 0 6px 1px rgba(255,138,76,.6); } 50% { box-shadow: 0 0 14px 4px rgba(255,93,143,.9); } }
+  #combo.hot { animation: combohot .9s ease-in-out infinite; }
+  #combo.max { animation: combohot .5s ease-in-out infinite; }
+  #over .card { position: relative; }
+  #over h2 { padding: 0 56px; }
+  .grade { position: absolute; top: 14px; right: 14px; font-size: 44px; font-weight: 700; line-height: 1; pointer-events: none; z-index: 1; }
+  .grade span { display: inline-block; border: 4px solid currentColor; border-radius: 12px; padding: 0 12px 3px; transform: rotate(10deg); animation: stamp .45s cubic-bezier(.2,1.6,.4,1) .7s both; background: rgba(255,255,255,.7); }
+  .grade .g-S { color: #e08a00; text-shadow: 0 0 14px rgba(255,200,60,.8); } .grade .g-A { color: #2a9d8f; } .grade .g-B { color: #3a86ff; } .grade .g-C { color: #8a9aa3; }
+  @keyframes stamp { 0% { transform: rotate(10deg) scale(3.2); opacity: 0; } 60% { opacity: 1; } 100% { transform: rotate(10deg) scale(1); opacity: 1; } }
+  .moments { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .moments:empty { display: none; }
+  .moments span { background: #fff6d6; color: #7a5a00; border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 700; animation: momin .4s ease both; }
+  .moments span:nth-child(2) { animation-delay: .15s; } .moments span:nth-child(3) { animation-delay: .3s; } .moments span:nth-child(4) { animation-delay: .45s; }
+  @keyframes momin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .wallet { font-size: 15px; color: #5b8792; font-weight: 700; }
+  .wallet b { color: #0f5465; font-size: 18px; }
+  .coin-rain { position: fixed; inset: 0; pointer-events: none; z-index: 12; overflow: hidden; }
+  .coin-rain i { position: absolute; top: -40px; font-style: normal; animation: coinfall 1.6s cubic-bezier(.3,.1,.6,1) forwards; }
+  @keyframes coinfall { to { transform: translateY(112vh) rotate(540deg); } }
+  #replay.pulse { animation: replaypulse 1.4s ease-in-out 1.8s infinite; }
+  @keyframes replaypulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+  @media (prefers-reduced-motion: reduce) { #banner, #toast, #discovery, .day.now { animation: none; } .chip { transition: none; } #combo.hot, #combo.max, #replay.pulse, .coin-rain i { animation: none; } }
+
+  /* ---- Desktop / landscape layout (CrazyGames build). Left column: logo, skin, Play, Go fishing, dock. Right: the store / upgrades / album panel,
+     which gets the width. Pages open from the dock (Missions, Stats, ...) use the same panel. The column layout above still serves portrait windows. ---- */
+  @media (min-aspect-ratio: 11/10) and (min-width: 700px) {
+    #menu { padding: calc(env(safe-area-inset-top, 0px) + 14px) clamp(16px, 3vw, 48px) 14px; }
+    #menu .menu { width: min(1320px, 100%); display: grid; grid-template-columns: minmax(250px, 30%) minmax(0, 1fr); grid-template-rows: auto auto auto auto 1fr auto;
+      grid-template-areas: "top top" "hero panel" "play panel" "fish panel" "free panel" "dock panel"; column-gap: clamp(18px, 2.4vw, 40px); row-gap: clamp(8px, 1.6vh, 16px); }
+    #menu .topbar { grid-area: top; }
+    #menu .fold.bar { display: none; }
+    #menu .fold.hero, #menu.browse .fold.hero { grid-area: hero; grid-template-rows: 1fr; opacity: 1; margin-bottom: 0; pointer-events: auto; }
+    #menu .fold.hero > div { padding-top: 0; }
+    #menu #play { grid-area: play; }
+    #menu #fishBtn { grid-area: fish; }
+    #menu .panel { grid-area: panel; min-height: 0; max-height: 100%; overflow: hidden; }
+    #menu .dock { grid-area: dock; align-self: end; }
+    #menu.browse button.btn { padding-block: clamp(6px, 1.4vh, 12px); font-size: clamp(16px, 2.7vh, 22px); }
+    .logo { font-size: clamp(56px, min(9vw, 14vh), 124px); }
+    .tagline { font-size: clamp(15px, 2.4vh, 20px); }
+    #menu .tab { font-size: clamp(15px, 2.2vh, 19px); }
+    /* the panel's lists use the extra width: more cards per row instead of three tall columns */
+    .grid { grid-template-columns: repeat(auto-fill, minmax(clamp(130px, 13vw, 170px), 1fr)); }
+    .album { grid-template-columns: repeat(auto-fill, minmax(clamp(96px, 9vw, 128px), 1fr)); }
+    .days { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+    .junk { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+    #tabBody { font-size: clamp(14px, 2.1vh, 17px); }
+  }
+  /* very short windows (the 800 x 450 iframe): drop the tagline and tighten the left column so Play + the panel still fit */
+  @media (min-aspect-ratio: 11/10) and (max-height: 520px) {
+    .tagline { display: none; }
+    .logo { font-size: clamp(40px, 11vh, 60px); }
+    #menu .menu { row-gap: 6px; }
+    #skinRow { font-size: 12px; gap: 6px; padding: 4px 6px 4px 10px; }
+    #skinRow select { min-width: 0; flex: 1; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud" class="hidden">
+  <div class="hud-row">
+    <div class="chip" id="score">0</div>
+    <div class="chip" id="combo"><span id="comboTxt">×1</span><i id="comboTimer"></i></div>
+    <div class="meter"><small id="fishCount">POND 0 / 36</small><div class="bar"><div id="fill"></div></div></div>
+    <button id="pause" aria-label="Pause">⏸</button>
+    <button id="mute" aria-label="Mute">🔊</button>
+  </div>
+  <div class="hud-row">
+    <div class="mini" id="bestBar"><div id="bestFill"></div><span id="bestLbl">BEST</span></div>
+    <div class="mini" id="frenzyBar"><div id="frenzyFill"></div><span id="frenzyLbl">FRENZY</span></div>
+  </div>
+</div>
+<div id="banner" class="hidden"></div>
+<div class="chip hidden" id="runCoins" aria-label="Coins earned this run"><span class="rc-dot">●</span><b id="runCoinsN">0</b></div>
+<div id="discovery" class="hidden">
+  <p class="disc-eyebrow">NEW SPECIES!</p>
+  <img id="discImg" width="120" height="120" alt="">
+  <b id="discName"></b>
+  <span id="discRar"></span>
+  <small id="discCount"></small>
+</div>
+
+<div id="menu" class="screen">
+  <div class="menu">
+    <div class="topbar">
+      <button class="level-pill" id="levelPill" data-tab="stats" aria-label="Open stats"><span class="lv" id="lv">1</span><span class="xp"><span id="xpFill"></span></span></button>
+      <span class="topright"><button class="icon-btn gear" id="settingsBtn" aria-label="Settings">⚙️</button><button class="icon-btn" id="homeBtn" data-tab="home" aria-label="My collection">🏡</button><button class="icon-btn" id="achBtn" data-tab="ach" aria-label="Achievements">🏆</button><button class="icon-btn" id="helpBtn" data-tab="how" aria-label="How to play">?</button><span class="coin-chip" id="coins">0</span></span>
+    </div>
+    <div class="fold bar"><div><button id="browseUp" type="button">▾ Show logo &amp; skins</button></div></div>
+    <div class="fold hero"><div>
+    <h1 class="logo" aria-label="Loopy!">
+      <span style="--c:#ff8a4c;--d:0s">L</span><span class="bub" style="--c:#c86bfa;--ca:200,107,250;--d:.12s" aria-hidden="true"></span><span class="bub" style="--c:#ff5d8f;--ca:255,93,143;--d:.24s" aria-hidden="true"></span><span style="--c:#7bd389;--d:.36s">p</span><span style="--c:#4cc9f0;--d:.48s">y</span><span class="bang" style="--c:#ffd84d;--d:.6s">!</span>
+      <i class="b1"></i><i class="b2"></i><i class="b3"></i>
+    </h1>
+    <p class="tagline">Loop the fish. Pop the pond.</p>
+    <label id="skinRow">Play as <select id="skin" aria-label="Skin"></select></label>
+    </div></div>
+    <button class="btn" id="play">Play</button>
+    <button class="btn ad" id="fishBtn">🎣 Go fishing</button>
+    <div class="card panel">
+      <div class="tabs" role="tablist">
+        <button class="tab" data-tab="store" role="tab">🛍️ Store</button>
+        <button class="tab" data-tab="upgrades" role="tab">⬆️ Upgrades</button>
+        <button class="tab" id="tab-album" data-tab="album" role="tab">📖 Album</button>
+      </div>
+      <div id="tabBody"></div>
+    </div>
+    <div class="dock">
+      <button class="dock-btn" id="dock-missions" data-tab="missions"><span class="di">📋</span><span class="dl">Missions</span><span class="badge hidden"></span></button>
+      <button class="dock-btn free" id="freeBtn"><span class="di">📺</span><span class="dl">+100 coins</span></button>
+    </div>
+  </div>
+</div>
+<template id="howTemplate">
+  <div class="how">
+    <button class="btn small ghost" id="replayTut">▶ Replay the intro</button>
+    <button class="btn small ghost" id="replayPractice">🎯 Replay the hands-on practice</button>
+    <div class="how-row"><span class="how-ico" style="--c:#ffe1b8">✏️</span><div><b>Draw a loop</b><small>Circle fish with your finger. Lift to close the net.</small></div></div>
+    <div class="how-row"><span class="how-ico" style="--c:#cdeff8">🎯</span><div><b>One color per loop</b><small>They pop. Bigger loops score way more: 10 fish beats ten 1-fish loops.</small></div></div>
+    <div class="how-row"><span class="how-ico" style="--c:#fff1b3">⭐</span><div><b>Golden fish are wild</b><small>They join any one-color catch and double it. Two other colors in the loop still tangle.</small></div></div>
+    <div class="how-row"><span class="how-ico" style="--c:#d9f5df">🧹</span><div><b>Clean Sweep</b><small>Catch at least 2/3 of one color in a single loop (5+ fish) for a 50% bonus.</small></div></div>
+    <div class="how-row"><span class="how-ico" style="--c:#ffd9c2">🔥</span><div><b>Frenzy</b><small>Catches fill the Frenzy bar. When it's full: 8 s of double points and a flood of fish.</small></div></div>
+    <div class="how-row"><span class="how-ico" style="--c:#efe0ff">🌈</span><div><b>Special fish (they glow)</b><small>Rainbow: any loop with it is valid, ×1.5, but only the first 10 fish pay in full. It is rare (about one every 70 to 100 s) and a soft, bell-like chime tells you when it swims in. Puffer: blows up every fish near it, whatever the color. Clock: slow-mo. $ fish: coins, but it swims off fast.</small></div></div>
+    <div class="how-row"><span class="how-ico" style="--c:#fff1b3">👑</span><div><b>The King</b><small>Now and then a giant golden fish crosses the pond. Loop it before it leaves.</small></div></div>
+    <div class="how-row"><span class="how-ico" style="--c:#cdeff8">⏳</span><div><b>Keep the combo alive</b><small>Catch again before the timer under your combo runs out.</small></div></div>
+    <div class="how-row bad"><span class="how-ico" style="--c:#ffd6dc">⚠️</span><div><b>Mixed colors tangle</b><small>Your combo resets and 2 more fish swim in.</small></div></div>
+    <div class="how-row bad"><span class="how-ico" style="--c:#d6e6ff">🌊</span><div><b>Don't let it overflow</b><small>Too many fish and the game ends. Bigger Pond upgrades raise the limit.</small></div></div>
+    <div class="how-row"><span class="how-ico" style="--c:#cdeff8">🎣</span><div><b>Go fishing</b><small>A chill minigame: hook the bite, then hold to keep the green bar on the fish. Reel in fish, junk and treasure chests, plus hats you can't buy.</small></div></div>
+    <div class="how-row"><span class="how-ico" style="--c:#d9f5df">🎲</span><div><b>Each skin plays differently</b><small>Fish dodge the tip of your rope. Sheep stamp (!) and then charge in sudden sprints. Toy balls drift gently and roll away only when they bump a ball of another color.</small></div></div>
+    <div class="how-row"><span class="how-ico" style="--c:#fff1b3">📖</span><div><b>Collect them all</b><small>44 rare species to find for your album, including 10 Legendaries. Earn coins and XP for hats, ponds, ropes and upgrades.</small></div></div>
+  </div>
+</template>
+
+<div id="over" class="screen hidden">
+  <div class="card">
+    <div class="grade" id="ovGrade"></div>
+    <h2>The pond overflowed!</h2>
+    <div class="big" id="final">0</div>
+    <p class="muted" id="bestLine"></p>
+    <p class="nudge" id="ovNudge"></p>
+    <div class="rewards">
+      <div><small>Fish caught</small><b id="ovFish">0</b></div>
+      <div><small>Biggest loop</small><b id="ovBig">0</b></div>
+      <div><small>Coins</small><b class="coin-text" id="ovCoins">+0</b></div>
+      <div><small>XP</small><b id="ovXp">+0</b></div>
+    </div>
+    <div class="moments" id="ovMoments"></div>
+    <div class="wallet">Wallet <b class="coin-text" id="ovWallet">0</b></div>
+    <p class="new-species" id="ovNew"></p>
+    <button class="btn" id="replay">Play again</button>
+    <button class="btn ad" id="revive">📺 Watch ad: clear 12 fish and keep going</button>
+    <button class="btn ad" id="double">📺 Watch ad: 2× coins</button>
+    <p id="adNote">Ads are blocked, so ad rewards are turned off.</p>
+    <button class="btn ghost" id="collect">Menu</button>
+  </div>
+</div>
+
+<div id="pauseScreen" class="screen hidden" role="dialog" aria-modal="true" aria-label="Paused">
+  <div class="card">
+    <h2>Paused</h2>
+    <p class="muted" id="pauseInfo"></p>
+    <button class="btn" id="resume">Resume</button>
+    <button class="btn ghost" id="pauseSettings">⚙️ Settings</button>
+    <button class="btn ghost" id="quit">End run</button>
+  </div>
+</div>
+
+<div id="vaultSpin" class="screen hidden" role="dialog" aria-modal="true" aria-label="Loot vault">
+  <div class="card slot">
+    <h2>🔐 Loot Vault</h2>
+    <div class="reels"><div class="reel" id="r0">🪙</div><div class="reel" id="r1">🪙</div><div class="reel" id="r2">🪙</div></div>
+    <p class="vault-msg" id="vaultMsg">Good luck!</p>
+    <button class="btn" id="vaultAgain">Spin again</button>
+    <button class="btn ghost" id="vaultClose">Close</button>
+  </div>
+</div>
+
+<div id="confirm" class="screen hidden" role="dialog" aria-modal="true" aria-labelledby="cfTitle">
+  <div class="card">
+    <div class="cf-icon" id="cfIcon"></div>
+    <p class="cf-title" id="cfTitle">Buy this?</p>
+    <p class="muted" id="cfDesc"></p>
+    <p class="cf-price" id="cfPrice"></p>
+    <label class="cf-skip" id="cfSkipRow"><input type="checkbox" id="cfSkip"> Don't ask me again</label>
+    <div class="cf-row"><button class="btn ghost" id="cfNo">Cancel</button><button class="btn" id="cfYes">Buy</button></div>
+  </div>
+</div>
+
+<div id="daily" class="screen hidden" role="dialog" aria-modal="true" aria-labelledby="dailyTitle">
+  <div class="card">
+    <h2 id="dailyTitle">Daily reward</h2>
+    <p class="muted" id="dailySub"></p>
+    <div class="days" id="days"></div>
+    <button class="btn" id="claimDaily">Claim</button>
+  </div>
+</div>
+
+<div id="ad" class="screen hidden">
+  <div class="card"><p class="muted">AD PLACEHOLDER</p><p id="adText">Rewarded ad</p><p class="big" id="adCount">3</p></div>
+</div>
+<div id="toast" class="hidden"></div>
+
+<div id="fishing" class="hidden" role="dialog" aria-modal="true" aria-label="Fishing">
+  <canvas id="fcv"></canvas>
+  <div id="fTop">
+    <button id="fClose" class="fbtn" aria-label="Close fishing">✕</button>
+    <span class="coin-chip" id="fCoins">0</span>
+    <span class="coin-chip tok" id="fTokens">0</span>
+    <button id="fTackle" class="fbtn wide">🎒 Tackle box</button>
+  </div>
+  <div id="fGear"></div>
+  <div id="fMsg"></div>
+  <div id="fResult" class="hidden"></div>
+</div>
+<div id="fSheet" class="screen hidden" role="dialog" aria-modal="true" aria-label="Tackle box">
+  <div class="card sheet">
+    <h2>🎒 Tackle box</h2>
+    <div class="subtabs" id="fTabs"></div>
+    <div id="fBody"></div>
+    <button class="btn ghost" id="fSheetClose">Back to fishing</button>
+  </div>
+</div>
+
+<script src="meta.js?v=29"></script>
+<script src="water.js?v=4"></script>
+<script src="game.js?v=39"></script>
+<script src="fishing.js?v=9"></script>
+<script src="extras.js?v=2"></script>
+<script src="minigames.js?v=11"></script>
+<script src="tutorial.js?v=6"></script>
+<script src="practice.js?v=5"></script>
+<script src="fun.js?v=3"></script>
+<script src="namefilter.js?v=1"></script>
+<script src="toss.js?v=1"></script>
+<script src="home.js?v=18"></script>
+<script src="settings.js?v=1"></script>
+<script src="music.js?v=8"></script>
+<script src="crazy.js?v=6"></script>
+</body>
+</html>
