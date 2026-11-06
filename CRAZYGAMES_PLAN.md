@@ -9,7 +9,7 @@ original project), before touching code.
 
 ## 0. Ground rules
 
-- **Work only in `F:\Backup\Ramsta E\Coding Projects\Lasso-crazygames`.** The original
+- **Work only in `<repo-root>`.** The original
   `..\Lasso` folder is the mobile version and must stay untouched.
 - **Never upload, submit, or publish anything** to CrazyGames or anywhere else. The owner
   submits by hand. Publishing is irreversible and outward-facing.
